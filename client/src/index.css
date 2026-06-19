@@ -1,0 +1,136 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&family=Fira+Code:wght@400;500;600&display=swap');
+
+@import "tailwindcss";
+
+:root {
+  /* Light mode defaults */
+  --obsidian-50: #050507;
+  --obsidian-100: #0c0c12;
+  --obsidian-200: #1f1f2e;
+  --obsidian-300: #2d2d3d;
+  --obsidian-400: #4b4b60;
+  --obsidian-500: #64647f;
+  --obsidian-600: #82829a;
+  --obsidian-700: #a1a1b5;
+  --obsidian-800: #e2e2e8;
+  --obsidian-850: #eaeaea;
+  --obsidian-900: #f4f4f6;
+  --obsidian-950: #ffffff;
+}
+
+.dark {
+  /* Dark mode overrides */
+  --obsidian-50: #f5f5f7;
+  --obsidian-100: #e8e8ed;
+  --obsidian-200: #d2d2db;
+  --obsidian-300: #aeaebe;
+  --obsidian-400: #85859d;
+  --obsidian-500: #64647f;
+  --obsidian-600: #4e4e68;
+  --obsidian-700: #3f3f56;
+  --obsidian-800: #1a1a24;
+  --obsidian-850: #12121b;
+  --obsidian-900: #0a0a0f;
+  --obsidian-950: #050507;
+}
+
+@theme {
+  --color-obsidian-50: var(--obsidian-50);
+  --color-obsidian-100: var(--obsidian-100);
+  --color-obsidian-200: var(--obsidian-200);
+  --color-obsidian-300: var(--obsidian-300);
+  --color-obsidian-400: var(--obsidian-400);
+  --color-obsidian-500: var(--obsidian-500);
+  --color-obsidian-600: var(--obsidian-600);
+  --color-obsidian-700: var(--obsidian-700);
+  --color-obsidian-800: var(--obsidian-800);
+  --color-obsidian-850: var(--obsidian-850);
+  --color-obsidian-900: var(--obsidian-900);
+  --color-obsidian-950: var(--obsidian-950);
+
+  --color-gold-50: #fefdf4;
+  --color-gold-100: #fdfae5;
+  --color-gold-200: #faf2be;
+  --color-gold-300: #f5e489;
+  --color-gold-400: #ebd14c;
+  --color-gold-500: #e5c158;
+  --color-gold-600: #cfa23b;
+  --color-gold-700: #ad7e2b;
+  --color-gold-800: #8f6327;
+  --color-gold-900: #754f22;
+  --color-gold-950: #432b10;
+
+  --font-sans: 'Inter', 'Outfit', sans-serif;
+  --font-mono: 'Fira Code', 'JetBrains Mono', monospace;
+}
+
+@layer base {
+  body {
+    @apply transition-colors duration-200 bg-obsidian-950 text-obsidian-100 font-sans;
+  }
+}
+
+/* Custom CSS Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-obsidian-700/60 rounded-full hover:bg-obsidian-600;
+}
+
+/* Glassmorphism custom classes */
+.glass-card {
+  background: rgba(245, 245, 247, 0.85);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.dark .glass-card {
+  background: rgba(10, 10, 15, 0.75);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.glass-card-light {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+/* Gradient text helpers */
+.text-gradient {
+  @apply bg-clip-text text-transparent bg-gradient-to-r from-gold-300 via-gold-500 to-amber-500;
+}
+
+.text-gradient-purple {
+  @apply bg-clip-text text-transparent bg-gradient-to-r from-violet-400 via-fuchsia-500 to-pink-500;
+}
+
+/* Custom animations */
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(229, 193, 88, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 25px rgba(229, 193, 88, 0.5);
+  }
+}
+
+.animate-glow {
+  animation: pulseGlow 3s infinite;
+}
+
+/* Dot repeating background pattern */
+.bg-dot-grid {
+  background-size: 24px 24px;
+  background-image: radial-gradient(rgba(229, 193, 88, 0.03) 1px, transparent 1px);
+}
+
+.dark .bg-dot-grid {
+  background-size: 24px 24px;
+  background-image: radial-gradient(rgba(229, 193, 88, 0.04) 1px, transparent 1px);
+}

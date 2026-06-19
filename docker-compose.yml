@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  # Main PostgreSQL Database for PatternCode and Judge0
+  db:
+    image: postgres:15-alpine
+    container_name: patterncode-db
+    restart: always
+    environment:
+      POSTGRES_DB: patterncode
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Autoload schema and seed data on initial launch
+      - ./server/src/db/schema.sql:/docker-entrypoint-initdb.d/1-schema.sql
+      - ./server/src/db/seeds.sql:/docker-entrypoint-initdb.d/2-seeds.sql
+
+  # Redis Cache & Queue for Judge0
+  redis:
+    image: redis:7-alpine
+    container_name: judge0-redis
+    restart: always
+    ports:
+      - "6379:6379"
+
+  # Judge0 Server for code execution
+  judge0:
+    image: judge0/judge0:1.13.0
+    container_name: judge0-server
+    restart: always
+    ports:
+      - "2358:2358"
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - POSTGRES_HOST=db
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=patterncode
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgrespassword
+    depends_on:
+      - db
+      - redis
+
+volumes:
+  postgres_data:
