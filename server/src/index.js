@@ -13,8 +13,9 @@ app.use(helmet());
 
 // ── CORS ────────────────────────────────────────────────────────────────────
 // In production, restrict to your actual frontend domain via CLIENT_URL env var.
-const allowedOrigins = process.env.CLIENT_URL
-  ? [process.env.CLIENT_URL, 'http://localhost:5173']
+const clientUrl = process.env.CLIENT_URL ? process.env.CLIENT_URL.replace(/\/$/, '') : null;
+const allowedOrigins = clientUrl
+  ? [clientUrl, 'http://localhost:5173']
   : ['http://localhost:5173', 'http://localhost:3000'];
 
 app.use(cors({
