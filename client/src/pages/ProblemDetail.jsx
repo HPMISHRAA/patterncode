@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
+import Editor from '@monaco-editor/react';
 import api from '../utils/api';
 import { splitSkeletonCode, buildFullCode } from '../utils/codeTemplate';
 import {
   Play, Send, HelpCircle, Eye, Code2, AlertTriangle, CheckCircle,
   CheckCircle2, XCircle, Sparkles, Flame, Award, Trophy, ChevronDown,
-  ChevronRight, Clock, Cpu, Lock
+  ChevronRight, Clock, Cpu, Lock, RotateCcw, Settings, Maximize2, Minimize2, Wand2
 } from 'lucide-react';
 
 /* ─────────────────────────────────────────────
@@ -48,6 +49,70 @@ function TestCaseCard({ tc, isActive, onClick }) {
 }
 
 /* ─────────────────────────────────────────────
+   Code Formatter Utility
+───────────────────────────────────────────── */
+const formatCode = (code, lang) => {
+  if (!code) return '';
+  if (lang === 'python') {
+    return code.split('\n').map(line => line.trimEnd()).join('\n');
+  }
+
+  const lines = code.split('\n');
+  let depth = 0;
+  const indent = '    '; // 4 spaces
+  const result = [];
+
+  for (let line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      result.push('');
+      continue;
+    }
+
+    let netChange = 0;
+    let tempDepth = depth;
+
+    for (let char of trimmed) {
+      if (char === '{') {
+        netChange++;
+      } else if (char === '}') {
+        netChange--;
+        if (netChange < 0) {
+          tempDepth = Math.max(0, tempDepth - 1);
+        }
+      }
+    }
+
+    result.push(indent.repeat(Math.max(0, tempDepth)) + trimmed);
+    depth = Math.max(0, depth + netChange);
+  }
+
+  return result.join('\n');
+};
+
+/* ─────────────────────────────────────────────
+   Error Line Mapping Utility (mapping backend lines to editor lines)
+───────────────────────────────────────────── */
+const mapErrorLines = (stderr, prefix) => {
+  if (!stderr) return '';
+  const prefixLines = prefix ? prefix.split('\n').length : 0;
+  
+  let mapped = stderr.replace(/(?:Solution|Main|main|input|source)(?:\.java|\.cpp|\.c|\.py)?:(\d+)/gi, (match, lineStr) => {
+    const lineVal = parseInt(lineStr, 10);
+    const mappedLine = lineVal - prefixLines;
+    return `Line ${mappedLine > 0 ? mappedLine : 'System'}`;
+  });
+
+  mapped = mapped.replace(/line\s+(\d+)/gi, (match, lineStr) => {
+    const lineVal = parseInt(lineStr, 10);
+    const mappedLine = lineVal - prefixLines;
+    return `Line ${mappedLine > 0 ? mappedLine : 'System'}`;
+  });
+
+  return mapped;
+};
+
+/* ─────────────────────────────────────────────
    Main Component
 ───────────────────────────────────────────── */
 export default function ProblemDetail() {
@@ -62,6 +127,19 @@ export default function ProblemDetail() {
   // Split code parts: prefix (hidden top), userCode (editable), suffix (hidden bottom)
   const [codeParts, setCodeParts] = useState({ prefix: '', userCode: '', suffix: '' });
   const textareaRef = useRef(null);
+  const gutterRef = useRef(null);
+
+  // ── Hybrid/Preferences state ──
+  const [editorMode, setEditorMode] = useState('rich'); // Monaco by default
+  const [fontSize, setFontSize] = useState(14);
+  const [wordWrap, setWordWrap] = useState('on');
+  const [showSettings, setShowSettings] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // ── Monaco instances ──
+  const [editorInstance, setEditorInstance] = useState(null);
+  const [monacoInstance, setMonacoInstance] = useState(null);
 
   // ── Custom run input ──
   const [customInput, setCustomInput] = useState('');
@@ -88,6 +166,23 @@ export default function ProblemDetail() {
   const rightPanelRef = useRef(null);
   const isDraggingRef = useRef(false);
 
+  // Load code from draft or template
+  const loadCode = useCallback((lang, prob) => {
+    const saved = localStorage.getItem(`draft_${slug}_${lang}`);
+    if (saved) {
+      const full = prob?.skeleton_code_json?.[lang] || '';
+      const split = splitSkeletonCode(full, lang);
+      setCodeParts({
+        prefix: split.prefix,
+        userCode: saved,
+        suffix: split.suffix
+      });
+    } else {
+      const full = prob?.skeleton_code_json?.[lang] || '';
+      setCodeParts(splitSkeletonCode(full, lang));
+    }
+  }, [slug]);
+
   /* ── Fetch problem ── */
   useEffect(() => {
     const fetchProblem = async () => {
@@ -96,9 +191,7 @@ export default function ProblemDetail() {
         if (response.data.success) {
           const prob = response.data.problem;
           setProblem(prob);
-          // Split skeleton for default language (java)
-          const full = prob.skeleton_code_json?.[language] || '';
-          setCodeParts(splitSkeletonCode(full, language));
+          loadCode(language, prob);
         }
       } catch (err) {
         console.error('Error fetching problem:', err);
@@ -108,16 +201,114 @@ export default function ProblemDetail() {
       }
     };
     fetchProblem();
-  }, [slug]);
+  }, [slug, loadCode]);
 
   /* ── Language change ── */
   const handleLanguageChange = (e) => {
     const lang = e.target.value;
     setLanguage(lang);
-    if (problem?.skeleton_code_json?.[lang]) {
-      setCodeParts(splitSkeletonCode(problem.skeleton_code_json[lang], lang));
+    if (problem) {
+      loadCode(lang, problem);
     }
   };
+
+  /* ── Auto-save Drafts ── */
+  useEffect(() => {
+    if (problem && codeParts.userCode) {
+      localStorage.setItem(`draft_${slug}_${language}`, codeParts.userCode);
+    }
+  }, [codeParts.userCode, slug, language, problem]);
+
+  /* ── Reset Code Handler ── */
+  const handleResetCode = () => {
+    if (problem?.skeleton_code_json?.[language]) {
+      const full = problem.skeleton_code_json[language];
+      const split = splitSkeletonCode(full, language);
+      setCodeParts(split);
+      localStorage.removeItem(`draft_${slug}_${language}`);
+      setShowResetConfirm(false);
+    }
+  };
+
+  /* ── Format Code Handler ── */
+  const handleFormatCode = () => {
+    if (codeParts.userCode) {
+      const formatted = formatCode(codeParts.userCode, language);
+      setCodeParts(p => ({ ...p, userCode: formatted }));
+    }
+  };
+
+  /* ── Monaco Theme Setup ── */
+  const handleEditorWillMount = (monaco) => {
+    monaco.editor.defineTheme('patternPlatformTheme', {
+      base: 'vs-dark',
+      inherit: true,
+      rules: [
+        { token: '', foreground: 'faf2be' },
+        { token: 'comment', foreground: '64647f', fontStyle: 'italic' },
+        { token: 'keyword', foreground: 'e5c158', fontStyle: 'bold' },
+        { token: 'string', foreground: 'ebd14c' },
+        { token: 'number', foreground: 'ebd14c' },
+        { token: 'type', foreground: 'ad7e2b' },
+        { token: 'class', foreground: 'ebd14c' },
+      ],
+      colors: {
+        'editor.background': '#09090d',
+        'editor.foreground': '#faf2be',
+        'editorGutter.background': '#050507',
+        'editorLineNumber.foreground': '#4e4e68',
+        'editorLineNumber.activeForeground': '#e5c158',
+        'editor.lineHighlightBackground': '#1a1a2430',
+        'editor.selectionBackground': '#e5c15825',
+      }
+    });
+  };
+
+  // Set compiler markers in Monaco Editor when compilation errors occur
+  useEffect(() => {
+    if (editorMode === 'rich' && editorInstance && monacoInstance) {
+      const stderr = runResult?.stderr || submitResult?.stderr || submitResult?.errorMessage || '';
+      const prefixLines = codeParts.prefix ? codeParts.prefix.split('\n').length : 0;
+      const lines = stderr.split('\n');
+      const markers = [];
+
+      for (let line of lines) {
+        // Match Main.java:X or main.cpp:X or File "main.py", line X
+        const match = line.match(/(?:Solution|Main|main|input|source)(?:\.java|\.cpp|\.c|\.py)?:(\d+):(?:(\d+):)?\s*(.*)/i) ||
+                      line.match(/line\s+(\d+)(?::(?:(\d+):)?)?\s*(.*)/i);
+        if (match) {
+          const lineNum = parseInt(match[1], 10) - prefixLines;
+          const colNum = match[2] ? parseInt(match[2], 10) : 1;
+          const message = match[3] || line;
+
+          if (lineNum > 0) {
+            markers.push({
+              startLineNumber: lineNum,
+              startColumn: colNum,
+              endLineNumber: lineNum,
+              endColumn: colNum + 5,
+              message: message,
+              severity: monacoInstance.MarkerSeverity.Error
+            });
+          }
+        }
+      }
+      const model = editorInstance.getModel();
+      if (model) {
+        monacoInstance.editor.setModelMarkers(model, 'compiler', markers);
+      }
+    }
+  }, [runResult, submitResult, editorInstance, monacoInstance, editorMode, codeParts.prefix]);
+
+  // Clear markers as soon as the user starts editing code
+  useEffect(() => {
+    if (editorInstance && monacoInstance) {
+      const model = editorInstance.getModel();
+      if (model) {
+        monacoInstance.editor.setModelMarkers(model, 'compiler', []);
+      }
+    }
+  }, [codeParts.userCode, editorInstance, monacoInstance]);
 
   /* ── Visualizer playback ── */
   useEffect(() => {
@@ -134,18 +325,57 @@ export default function ProblemDetail() {
     return () => clearInterval(timer);
   }, [isPlaying, problem]);
 
-  /* ── Tab-key support in textarea ── */
+  /* ── Tab-key & Bracket auto-closing support in textarea ── */
   const handleKeyDown = useCallback((e) => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    const val = codeParts.userCode;
+
     if (e.key === 'Tab') {
       e.preventDefault();
-      const ta = textareaRef.current;
-      const start = ta.selectionStart;
-      const end = ta.selectionEnd;
-      const newVal = codeParts.userCode.substring(0, start) + '    ' + codeParts.userCode.substring(end);
+      const newVal = val.substring(0, start) + '    ' + val.substring(end);
       setCodeParts(p => ({ ...p, userCode: newVal }));
       requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = start + 4; });
+      return;
+    }
+
+    const pairs = { '{': '}', '(': ')', '[': ']', '"': '"', "'": "'" };
+    if (pairs[e.key]) {
+      e.preventDefault();
+      const closingChar = pairs[e.key];
+      
+      const selection = val.substring(start, end);
+      const newVal = val.substring(0, start) + e.key + selection + closingChar + val.substring(end);
+      setCodeParts(p => ({ ...p, userCode: newVal }));
+      requestAnimationFrame(() => {
+        ta.selectionStart = start + 1;
+        ta.selectionEnd = start + 1 + selection.length;
+      });
     }
   }, [codeParts.userCode]);
+
+  /* ── Global Keyboard Shortcuts ── */
+  useEffect(() => {
+    const handleGlobalKeyDown = (e) => {
+      // Ctrl+Enter / Cmd+Enter to Run
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        if (e.shiftKey) {
+          handleSubmitCode();
+        } else {
+          handleRunCode();
+        }
+      }
+      // Escape to exit fullscreen
+      if (e.key === 'Escape' && isFullscreen) {
+        setIsFullscreen(false);
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [codeParts, language, slug, runLoading, submitLoading, isFullscreen]);
 
   /* ── Run Code ── */
   const handleRunCode = async () => {
@@ -413,29 +643,141 @@ export default function ProblemDetail() {
       {/* ══════════════════════════════════════
           RIGHT PANEL: EDITOR + CONSOLE
       ══════════════════════════════════════ */}
-      <div ref={rightPanelRef} className="flex flex-col h-full overflow-hidden bg-obsidian-950">
+      <div
+        ref={rightPanelRef}
+        className={`flex flex-col h-full overflow-hidden bg-obsidian-950 transition-all ${
+          isFullscreen ? 'fixed inset-0 z-[60] w-screen h-screen' : ''
+        }`}
+      >
 
         {/* Editor toolbar */}
-        <div className="flex items-center justify-between border-b border-obsidian-850 px-4 py-2 bg-obsidian-900/30 shrink-0">
+        <div className="flex flex-wrap items-center justify-between border-b border-obsidian-850 px-4 py-2 bg-obsidian-900/30 shrink-0 gap-2 select-none">
           <div className="flex items-center gap-2">
             <Code2 className="h-4 w-4 text-gold-500" />
             <span className="text-xs font-bold text-obsidian-300 uppercase tracking-widest">Workspace</span>
           </div>
-          <select
-            value={language}
-            onChange={handleLanguageChange}
-            className="bg-obsidian-900 border border-obsidian-800 text-obsidian-200 text-xs font-semibold px-2.5 py-1.5 rounded-lg focus:outline-none focus:border-gold-500"
-          >
-            <option value="python">Python 3</option>
-            <option value="java">Java 13</option>
-            <option value="cpp">C++ (GCC)</option>
-            <option value="c">C (GCC)</option>
-          </select>
+          
+          <div className="flex items-center gap-3">
+            {/* Editor mode toggler */}
+            <div className="flex bg-obsidian-950 p-1 rounded-lg border border-obsidian-850 text-[10px] font-bold">
+              <button
+                onClick={() => setEditorMode('rich')}
+                className={`px-2.5 py-1 rounded transition-colors ${
+                  editorMode === 'rich'
+                    ? 'bg-gold-500 text-obsidian-950'
+                    : 'text-obsidian-450 hover:text-obsidian-200'
+                }`}
+              >
+                Rich
+              </button>
+              <button
+                onClick={() => setEditorMode('simple')}
+                className={`px-2.5 py-1 rounded transition-colors ${
+                  editorMode === 'simple'
+                    ? 'bg-gold-500 text-obsidian-950'
+                    : 'text-obsidian-450 hover:text-obsidian-200'
+                }`}
+              >
+                Simple
+              </button>
+            </div>
+
+            {/* Language Selector */}
+            <select
+              value={language}
+              onChange={handleLanguageChange}
+              className="bg-obsidian-900 border border-obsidian-800 text-obsidian-200 text-xs font-semibold px-2.5 py-1.5 rounded-lg focus:outline-none focus:border-gold-500"
+            >
+              <option value="python">Python 3</option>
+              <option value="java">Java 13</option>
+              <option value="cpp">C++ (GCC)</option>
+              <option value="c">C (GCC)</option>
+            </select>
+
+            <div className="h-5 w-px bg-obsidian-800"></div>
+
+            {/* Settings dropdown trigger */}
+            <div className="relative">
+              <button
+                onClick={() => setShowSettings(!showSettings)}
+                className={`p-1.5 rounded-lg border transition-all ${
+                  showSettings
+                    ? 'bg-obsidian-850 border-gold-500/50 text-gold-500'
+                    : 'bg-obsidian-900 border-obsidian-800 text-obsidian-400 hover:bg-obsidian-850 hover:text-obsidian-200'
+                }`}
+                title="Editor Settings"
+              >
+                <Settings className="h-3.5 w-3.5" />
+              </button>
+              {showSettings && (
+                <div className="absolute right-0 mt-2 w-48 bg-obsidian-900 border border-obsidian-800 rounded-xl shadow-2xl p-4 flex flex-col gap-3 z-[70]">
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-[9px] font-extrabold text-obsidian-450 uppercase tracking-wider">Font Size</span>
+                    <div className="flex bg-obsidian-950 p-1 rounded-lg border border-obsidian-850 text-[10px] font-semibold justify-between">
+                      {[12, 14, 16, 18].map(sz => (
+                        <button
+                          key={sz}
+                          onClick={() => setFontSize(sz)}
+                          className={`px-2 py-0.5 rounded transition-all ${
+                            fontSize === sz
+                              ? 'bg-gold-500 text-obsidian-950 font-bold'
+                              : 'text-obsidian-400 hover:text-obsidian-250'
+                          }`}
+                        >
+                          {sz}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-[9px] font-extrabold text-obsidian-450 uppercase tracking-wider">Line Wrap</span>
+                    <button
+                      onClick={() => setWordWrap(wordWrap === 'on' ? 'off' : 'on')}
+                      className={`text-center py-1.5 rounded-lg border text-[10px] font-bold transition-all ${
+                        wordWrap === 'on'
+                          ? 'bg-gold-500/10 border-gold-500/20 text-gold-400'
+                          : 'bg-obsidian-950 border-obsidian-850 text-obsidian-500'
+                      }`}
+                    >
+                      {wordWrap === 'on' ? 'Wrapped' : 'No Wrap'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Format Code Button */}
+            <button
+              onClick={handleFormatCode}
+              className="p-1.5 rounded-lg border bg-obsidian-900 border-obsidian-800 text-obsidian-400 hover:bg-obsidian-850 hover:text-obsidian-200 transition-all active:scale-95"
+              title="Format Code"
+            >
+              <Wand2 className="h-3.5 w-3.5" />
+            </button>
+
+            {/* Reset Button */}
+            <button
+              onClick={() => setShowResetConfirm(true)}
+              className="p-1.5 rounded-lg border bg-obsidian-900 border-obsidian-800 text-obsidian-400 hover:bg-obsidian-850 hover:text-obsidian-200 transition-colors"
+              title="Reset starter template"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+            </button>
+
+            {/* Fullscreen Toggle */}
+            <button
+              onClick={() => setIsFullscreen(!isFullscreen)}
+              className="p-1.5 rounded-lg border bg-obsidian-900 border-obsidian-800 text-obsidian-400 hover:bg-obsidian-850 hover:text-obsidian-200 transition-colors"
+              title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
+            >
+              {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+            </button>
+          </div>
         </div>
 
         {/* ── Code Editor (user editable portion only) ── */}
         <div
-          className="overflow-hidden flex font-mono flex-col shrink-0"
+          className="overflow-hidden flex font-mono flex-col shrink-0 relative"
           style={{ height: `${editorHeightPct}%` }}
         >
 
@@ -448,22 +790,67 @@ export default function ProblemDetail() {
           )}
 
           {/* Editable area */}
-          <div className="flex flex-grow overflow-hidden">
-            {/* Line numbers */}
-            <div className="bg-[#050507] text-[#4e4e68] text-right select-none pr-3 pt-4 pb-4 text-xs font-semibold border-r border-[#1a1a24]/50 overflow-hidden shrink-0 w-10">
-              {Array.from({ length: lineCount }).map((_, idx) => (
-                <div key={idx} className="leading-relaxed">{idx + 1}</div>
-              ))}
-            </div>
-            <textarea
-              ref={textareaRef}
-              value={codeParts.userCode}
-              onChange={e => setCodeParts(p => ({ ...p, userCode: e.target.value }))}
-              onKeyDown={handleKeyDown}
-              className="flex-grow bg-[#09090d] text-[#faf2be] text-sm font-mono p-4 outline-none resize-none overflow-y-auto leading-relaxed border-none focus:ring-0"
-              spellCheck="false"
-              placeholder="// Start typing your solution..."
-            />
+          <div className="flex flex-grow overflow-hidden relative">
+            {editorMode === 'rich' ? (
+              <Editor
+                height="100%"
+                language={language === 'cpp' ? 'cpp' : language === 'c' ? 'c' : language}
+                theme="patternPlatformTheme"
+                value={codeParts.userCode}
+                onChange={(val) => setCodeParts(p => ({ ...p, userCode: val || '' }))}
+                beforeMount={handleEditorWillMount}
+                onMount={(editor, monaco) => {
+                  setEditorInstance(editor);
+                  setMonacoInstance(monaco);
+                }}
+                loading={
+                  <div className="flex-grow flex items-center justify-center text-gold-500 bg-[#09090d]">
+                    <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-gold-500 mr-2"></div>
+                    <span>Initializing rich editor...</span>
+                  </div>
+                }
+                options={{
+                  minimap: { enabled: false },
+                  fontSize: fontSize,
+                  lineNumbers: 'on',
+                  roundedSelection: false,
+                  scrollBeyondLastLine: false,
+                  readOnly: false,
+                  automaticLayout: true,
+                  wordWrap: wordWrap,
+                  padding: { top: 12, bottom: 12 },
+                  fontFamily: "'Fira Code', 'JetBrains Mono', monospace",
+                }}
+              />
+            ) : (
+              <>
+                {/* Line numbers */}
+                <div
+                  ref={gutterRef}
+                  className="bg-[#050507] text-[#4e4e68] text-right select-none pr-3 pt-4 pb-4 text-xs font-semibold border-r border-[#1a1a24]/50 overflow-y-hidden shrink-0 w-10"
+                  style={{ fontSize: `${fontSize}px` }}
+                >
+                  {Array.from({ length: lineCount }).map((_, idx) => (
+                    <div key={idx} className="leading-relaxed">{idx + 1}</div>
+                  ))}
+                </div>
+                <textarea
+                  ref={textareaRef}
+                  value={codeParts.userCode}
+                  onChange={e => setCodeParts(p => ({ ...p, userCode: e.target.value }))}
+                  onKeyDown={handleKeyDown}
+                  onScroll={e => {
+                    if (gutterRef.current) {
+                      gutterRef.current.scrollTop = e.currentTarget.scrollTop;
+                    }
+                  }}
+                  className="flex-grow bg-[#09090d] text-[#faf2be] text-sm font-mono p-4 outline-none resize-none overflow-y-auto leading-relaxed border-none focus:ring-0"
+                  spellCheck="false"
+                  placeholder="// Start typing your solution..."
+                  style={{ fontSize: `${fontSize}px`, whiteSpace: wordWrap === 'on' ? 'pre-wrap' : 'pre' }}
+                />
+              </>
+            )}
           </div>
 
           {/* Hidden suffix banner */}
@@ -628,7 +1015,7 @@ export default function ProblemDetail() {
                             ? 'bg-red-500/5 border-red-500/20 text-red-400'
                             : 'bg-obsidian-950 border-obsidian-850 text-gold-500'
                         }`}>
-                          {runResult.stderr || runResult.stdout || '(no output)'}
+                          {mapErrorLines(runResult.stderr, codeParts.prefix) || runResult.stdout || '(no output)'}
                         </pre>
                       </div>
                     </div>
@@ -714,7 +1101,7 @@ export default function ProblemDetail() {
                                     : 'bg-red-500/5 border-red-500/20 text-red-400'
                                 }`}>
                                   {activeTcResult.stderr
-                                    ? `Runtime Error:\n${activeTcResult.stderr}`
+                                    ? `Runtime Error:\n${mapErrorLines(activeTcResult.stderr, codeParts.prefix)}`
                                     : (activeTcResult.actual || '(no output)')}
                                 </pre>
                               </div>
@@ -805,6 +1192,37 @@ export default function ProblemDetail() {
             >
               Continue Practice
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════
+          RESET CODE CONFIRMATION MODAL
+      ══════════════════════════════════════ */}
+      {showResetConfirm && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-obsidian-950/80 backdrop-blur-md">
+          <div className="w-full max-w-sm bg-obsidian-900 border border-obsidian-800 p-6 rounded-2xl flex flex-col gap-5 shadow-2xl">
+            <div className="flex items-center gap-3 text-red-500">
+              <AlertTriangle className="h-6 w-6 shrink-0" />
+              <h3 className="text-lg font-bold text-obsidian-50">Reset Solution?</h3>
+            </div>
+            <p className="text-xs text-obsidian-350 leading-relaxed">
+              Are you sure you want to reset your solution for <strong className="text-obsidian-200">{problem?.title} ({language})</strong>? This will delete all your current edits and restore the default starter template.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowResetConfirm(false)}
+                className="flex-1 bg-obsidian-800 border border-obsidian-750 hover:bg-obsidian-750 text-obsidian-200 font-bold py-2 rounded-xl text-xs transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleResetCode}
+                className="flex-1 bg-red-650 hover:bg-red-600 text-white font-bold py-2 rounded-xl text-xs transition-all"
+              >
+                Reset Code
+              </button>
+            </div>
           </div>
         </div>
       )}
