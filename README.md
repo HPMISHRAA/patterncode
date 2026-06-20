@@ -7,7 +7,12 @@ PatternCode is a feature-rich, interactive LeetCode-style learning platform desi
 ## 🌟 Key Features
 
 * **49 Built-in Pattern Problems:** Ranging from Star and Number patterns to Hollow shapes, Pyramids, and complex Math-based patterns.
-* **Interactive Code Editor:** Write solutions in **Python, Java, C++, or C** with code skeleton template preloading.
+* **Dual-Mode Workspace Editor:** Write solutions in **Python, Java, C++, or C** with code skeleton template preloading. Features a VS Code-like **Rich Editor (Monaco Editor)** and a lightweight **Simple Editor (Textarea)** fallback.
+  * **Brace Auto-Closing**: Automatic closing brace, bracket, and quote insertion.
+  * **Local Draft Auto-Saves**: Auto-saves your code in local storage per problem and language.
+  * **One-Click Formatter**: Custom block-indentation formatter for Java, C++, C, and python code layout cleanup.
+  * **Mapped Line Errors**: Maps compiler syntax errors back to editor line offsets, drawing inline red squiggly lines on Monaco.
+  * **Zen Focus Mode**: Fullscreen editor workspace toggle.
 * **Real Cloud Compiler (OnlineCompiler.io):** Executing code securely in sandboxes and returning exact compiler output.
 * **Firebase Authentication:** Secure email/password and Google login integrations.
 * **Neon PostgreSQL Database:** Persistence for users, submissions, badges, and problem stats.
