@@ -95,6 +95,11 @@ const formatCode = (code, lang) => {
 ───────────────────────────────────────────── */
 const mapErrorLines = (stderr, prefix) => {
   if (!stderr) return '';
+  
+  if (stderr.trim() === 'Internal error: code execution failed') {
+    return 'Internal error: code execution failed\n\n💡 Tip: Detailed compilation errors and line-by-line highlights require a real compiler service. To enable them, start your local Judge0 service ("docker compose up -d") or configure a Judge0 API key in your server env.';
+  }
+
   const prefixLines = prefix ? prefix.split('\n').length : 0;
   
   let mapped = stderr.replace(/(?:Solution|Main|main|input|source)(?:\.java|\.cpp|\.c|\.py)?:(\d+)/gi, (match, lineStr) => {
