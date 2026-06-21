@@ -111,7 +111,7 @@ async function executeCode(code, language, stdin, expectedOutput = '') {
       let stderr = data.error || '';
 
       // If the compiler service itself had an internal error, throw to fall back
-      if (stderr && stderr.includes('Internal error')) {
+      if (stderr && stderr.includes('Internal error') && !stderr.includes('code execution failed')) {
         throw new Error(`OnlineCompiler service failure: ${stderr}`);
       }
 
