@@ -92,3 +92,25 @@ The SQL script to set up database tables is located at `server/src/db/schema.sql
 cd server
 node src/db/seed.js
 ```
+
+---
+
+## 🌐 Production Deployment & Live Links
+
+The platform is deployed and fully operational in production across the following environments:
+
+* **Frontend Client (Vercel):** [https://patterncode-six.vercel.app](https://patterncode-six.vercel.app)
+* **Backend Server (Render):** Hosted on Render (accessible via API requests from the frontend).
+* **Database (PostgreSQL):** Serverless Neon DB instance.
+
+### Deployment Details
+
+#### Frontend (Vercel)
+* **Hosting Platform:** Vercel (Auto-deployed from the `main` branch).
+* **Environment Configuration:** Built using Vite with `VITE_API_URL` pointing to the live Render backend and web application configurations for Firebase Auth.
+
+#### Backend (Render)
+* **Hosting Platform:** Render.
+* **Database Connection:** Connects securely to the Neon PostgreSQL database in production.
+* **Environment Configuration:** Uses environment variables for the Postgres URI connection pool, Firebase Admin Service Account JSON, and the OnlineCompiler key.
+
