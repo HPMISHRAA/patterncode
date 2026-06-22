@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
+import { Analytics } from '@vercel/analytics/react';
 
 // Page imports
 import Home from './pages/Home';
@@ -91,6 +92,7 @@ function App() {
           {/* Footer branding */}
           <Footer />
         </div>
+        <Analytics />
       </Router>
     </AuthProvider>
   );
