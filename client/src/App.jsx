@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import { Analytics } from '@vercel/analytics/react';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 
 // Page imports
 import Home from './pages/Home';
@@ -93,6 +94,7 @@ function App() {
           <Footer />
         </div>
         <Analytics />
+        <SpeedInsights />
       </Router>
     </AuthProvider>
   );
